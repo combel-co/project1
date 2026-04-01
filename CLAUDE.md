@@ -30,10 +30,13 @@ Tu endosses 3 profils simultanément :
 
 ### Google Drive
 - Dossier principal : https://drive.google.com/drive/u/1/folders/1umM560zifSEZlvxw1zvsRBfrFyYJMXVV
-- Note : accès Drive non disponible via MCP. Demander à l'utilisateur de partager le contenu si nécessaire.
+- Accès : via notion-search (ai_search) SI Notion AI est connecté à Drive (Settings → Connections)
+- Si pas indexé : demander à l'utilisateur de coller le contenu du fichier Drive
 
 ### Google Calendar (MCP disponible)
+- Accès direct via gcal_* tools
 - Utiliser pour planifier les RDV avocat, bancaires, prospects
+- Résultats visibles dans notion-search (ai_search) — calendrier indexé
 
 ## Chemin critique du projet
 
