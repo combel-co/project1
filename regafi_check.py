@@ -43,9 +43,52 @@ def search(denomination: str, client_id: str = None) -> list:
     return data.get("entities", data.get("data", []))
 
 
+def fetch_detail(entity_id: str, client_id: str = None) -> dict:
+    """Fetches full entity detail including ancillary/connected services."""
+    url = f"{BASE_URL}/entities/{entity_id}"
+    headers = {"Accept": "application/json"}
+    if client_id:
+        headers["X-IBM-Client-Id"] = client_id
+    r = requests.get(url, headers=headers, timeout=15)
+    if r.status_code == 200:
+        return r.json()
+    return {}
+
+
 def has_safekeeping(entity: dict) -> bool:
     text = json.dumps(entity).lower()
     return any(kw in text for kw in SAFEKEEPING_KEYWORDS)
+
+
+def print_services(detail: dict):
+    """Prints investment services and ancillary services from entity detail."""
+    france = detail.get("france_activities", {})
+
+    # Services d'investissement principaux
+    inv = france.get("investment_services", {})
+    inv_items = inv.get("data", inv) if isinstance(inv, dict) else inv
+    if inv_items:
+        print("      ▸ Services d'investissement :")
+        raw = json.dumps(inv_items).lower()
+        for kw in SAFEKEEPING_KEYWORDS:
+            if kw in raw:
+                print(f"          → '{kw}' ✅")
+
+    # Services connexes (ancillary) — c'est là que vit la TCC
+    ancillary = france.get("ancillary_services", france.get("connected_services", {}))
+    anc_items = ancillary.get("data", ancillary) if isinstance(ancillary, dict) else ancillary
+    if anc_items:
+        print("      ▸ Services connexes (ancillary) :")
+        raw = json.dumps(anc_items)
+        print(f"          {raw[:300]}")
+        for kw in SAFEKEEPING_KEYWORDS:
+            if kw in raw.lower():
+                print(f"          → '{kw}' ✅")
+
+    # Dump brut si rien trouvé ci-dessus
+    if not inv_items and not anc_items:
+        keys = list(france.keys()) if france else list(detail.keys())
+        print(f"      ▸ Clés disponibles dans le détail : {keys}")
 
 
 def check_target(target: dict, client_id: str = None):
@@ -84,25 +127,24 @@ def check_target(target: dict, client_id: str = None):
             entity.get("company_description", {}).get("category", "")
             or entity.get("category", "")
         )
+        entity_id = (
+            entity.get("id", "")
+            or entity.get("entity_id", "")
+        )
 
-        safekeeping = has_safekeeping(entity)
+        # Fetch full detail to get ancillary services (TCC lives there)
+        detail = fetch_detail(str(entity_id), client_id) if entity_id else entity
+        merged = {**entity, **detail}
+        safekeeping = has_safekeeping(merged)
         icon = "✅" if safekeeping else "❌"
 
         print(f"\n  {icon}  {name}")
         print(f"      SIREN    : {siren}")
         print(f"      Statut   : {status}")
         print(f"      Catégorie: {category}")
+        print(f"      ID REGAFI: {entity_id}")
         print(f"      Tenue de compte (L542-1) : {'OUI ✅' if safekeeping else 'NON ❌'}")
-
-        france = entity.get("france_activities", {})
-        inv = france.get("investment_services", {})
-        inv_data = inv.get("data", {})
-        if inv_data:
-            print("      Services d'investissement :")
-            raw = json.dumps(inv_data)
-            for kw in SAFEKEEPING_KEYWORDS:
-                if kw in raw.lower():
-                    print(f"        → '{kw}' détecté ✅")
+        print_services(merged)
 
 
 def main():
@@ -111,12 +153,19 @@ def main():
                         help="Clé API X-IBM-Client-Id (optionnelle si accès public)")
     parser.add_argument("--json-out", action="store_true",
                         help="Sortie JSON brute pour débogage")
+    parser.add_argument("--id", default=None,
+                        help="Fetch le détail d'une entité par son ID REGAFI")
     args = parser.parse_args()
 
     print("\n" + "="*55)
     print("  REGAFI CHECKER — Capitali")
     print("  Vérification habilitation TCC (L542-1 CMF)")
     print("="*55)
+
+    if args.id:
+        detail = fetch_detail(args.id, args.client_id)
+        print(json.dumps(detail, indent=2, ensure_ascii=False))
+        return
 
     if args.json_out:
         results = search("uptevia", args.client_id)
